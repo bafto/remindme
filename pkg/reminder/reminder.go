@@ -50,6 +50,22 @@ func (e *Entry) GetTime() (time.Time, error) {
 	return time.Parse(timeLayout, e.When)
 }
 
+func overrideReminders(entries []Entry) error {
+	data, err := json.Marshal(entries)
+	if err != nil {
+		return err
+	}
+
+	f, err := os.OpenFile(savePath, os.O_TRUNC, os.ModePerm)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = f.Write(data)
+	return err
+}
+
 func GetAllReminders() (entries []Entry, err error) {
 	f, err := os.OpenFile(savePath, os.O_RDONLY, os.ModePerm)
 	if err != nil {
@@ -61,4 +77,22 @@ func GetAllReminders() (entries []Entry, err error) {
 		return nil, err
 	}
 	return entries, nil
+}
+
+// removes the specified entry by comparing it
+// returns the number of remaining reminders
+func RemoveReminder(entry Entry) (int, error) {
+	entries, err := GetAllReminders()
+	if err != nil {
+		return 0, err
+	}
+
+	// remove the specified entry by checking
+	for i, other := range entries {
+		if other == entry {
+			entries = append(entries[:i], entries[i+1:]...)
+		}
+	}
+
+	return len(entries), overrideReminders(entries)
 }
