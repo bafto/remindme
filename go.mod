@@ -2,7 +2,10 @@ module github.com/bafto/remindme
 
 go 1.18
 
-require github.com/gen2brain/beeep v0.0.0-20220402123239-6a3042f4b71a
+require (
+	github.com/gen2brain/beeep v0.0.0-20220402123239-6a3042f4b71a
+	github.com/google/uuid v1.3.0
+)
 
 require (
 	github.com/go-toast/toast v0.0.0-20190211030409-01e6764cf0a4 // indirect

@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -44,6 +46,16 @@ type Entry struct {
 	When  string
 	Title string
 	Msg   string
+	Id    uuid.UUID
+}
+
+func NewEntry(when time.Time, title, msg string) Entry {
+	return Entry{
+		When:  when.Format(timeLayout),
+		Title: title,
+		Msg:   msg,
+		Id:    uuid.New(),
+	}
 }
 
 func (e *Entry) GetTime() (time.Time, error) {
@@ -79,6 +91,15 @@ func GetAllReminders() (entries []Entry, err error) {
 	return entries, nil
 }
 
+func AddReminder(entry Entry) error {
+	if entries, err := GetAllReminders(); err != nil {
+		return err
+	} else {
+		entries = append(entries, entry)
+		return overrideReminders(entries)
+	}
+}
+
 // removes the specified entry by comparing it
 // returns the number of remaining reminders
 func RemoveReminder(entry Entry) (int, error) {
@@ -89,7 +110,7 @@ func RemoveReminder(entry Entry) (int, error) {
 
 	// remove the specified entry by checking
 	for i, other := range entries {
-		if other == entry {
+		if other.Id == entry.Id {
 			entries = append(entries[:i], entries[i+1:]...)
 		}
 	}

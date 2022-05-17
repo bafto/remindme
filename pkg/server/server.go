@@ -3,19 +3,49 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/bafto/remindme/pkg/reminder"
 	"github.com/gen2brain/beeep"
+	"github.com/google/uuid"
 )
 
 var (
-	eventChan    chan reminder.Entry
-	missedEvents []reminder.Entry = make([]reminder.Entry, 0)
+	eventChan      chan reminder.Entry
+	tickerChannels map[uuid.UUID]chan bool // to close running event goroutines on delete
+	missedEvents   []reminder.Entry        = make([]reminder.Entry, 0)
 )
+
+func queueEvent(event reminder.Entry) error {
+	when, err := event.GetTime()
+	if err != nil {
+		return err
+	}
+
+	if when.Before(time.Now()) {
+		missedEvents = append(missedEvents, event)
+		return nil
+	}
+
+	tickerChannels[event.Id] = make(chan bool)
+	go func(event reminder.Entry) {
+		select {
+		case <-time.After(when.Sub(time.Now())):
+			eventChan <- event
+		case <-tickerChannels[event.Id]:
+			return
+		}
+	}(event)
+
+	return nil
+}
 
 func startEventListeners() error {
 	entries, err := reminder.GetAllReminders()
@@ -26,23 +56,26 @@ func startEventListeners() error {
 	eventChan = make(chan reminder.Entry, len(entries))
 
 	for _, entry := range entries {
-		when, err := entry.GetTime()
-		if err != nil {
+		if err := queueEvent(entry); err != nil {
 			return err
 		}
-
-		if when.Before(time.Now()) {
-			missedEvents = append(missedEvents, entry)
-			continue
-		}
-
-		go func(event reminder.Entry) {
-			<-time.After(when.Sub(time.Now()))
-			eventChan <- event
-		}(entry)
 	}
 
 	return nil
+}
+
+func notifyMissedEvents() {
+	str := strings.Join(func() []string {
+		ret := make([]string, 0, len(missedEvents))
+		for _, entry := range missedEvents {
+			ret = append(ret, entry.Title)
+		}
+		return ret
+	}(), "\n")
+	beeep.Notify(fmt.Sprintf("You missed %d reminders", len(missedEvents)), str, "")
+	for _, entry := range missedEvents {
+		reminder.RemoveReminder(entry)
+	}
 }
 
 func StartServer(port string) (<-chan error, error) {
@@ -51,14 +84,49 @@ func StartServer(port string) (<-chan error, error) {
 	}
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		// read the request body
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// unmarshal the request body into the event
+		var event reminder.Entry
+		if err := json.Unmarshal(body, &event); err != nil {
+			log.Println(err)
+			http.Error(w, "invalid json body", http.StatusBadRequest)
+			return
+		}
+
 		switch r.Method {
 		case http.MethodPost:
+			if err := queueEvent(event); err != nil {
+				log.Println(err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			} else if err := reminder.AddReminder(event); err != nil {
+				log.Println(err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 		case http.MethodDelete:
+			// remove the event from the list
+			if _, err := reminder.RemoveReminder(event); err != nil {
+				log.Println(err)
+				http.Error(w, "failed to remove the event", http.StatusInternalServerError)
+				return
+			}
+			tickerChannels[event.Id] <- true // close the ticker goroutine
 		default:
 			http.Error(w, "invalid request type", http.StatusBadRequest)
 		}
 	})
 
+	notifyMissedEvents()
+
+	// main goroutine that waits for the event timers
 	finished := make(chan error, 2)
 	go func() {
 		for event := range eventChan {
