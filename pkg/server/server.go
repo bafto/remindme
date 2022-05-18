@@ -18,8 +18,9 @@ import (
 )
 
 var (
-	eventChan      chan reminder.Entry
-	tickerChannels map[uuid.UUID]chan bool // to close running event goroutines on delete
+	eventChan chan reminder.Entry
+	// to close running event goroutines on delete
+	tickerChannels map[uuid.UUID]chan bool = make(map[uuid.UUID]chan bool)
 	missedEvents   []reminder.Entry        = make([]reminder.Entry, 0)
 )
 

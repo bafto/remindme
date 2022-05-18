@@ -9,7 +9,7 @@ import (
 )
 
 func serverRunning() bool {
-	if resp, err := http.Get("127.0.0:3050"); err != nil {
+	if resp, err := http.Get("http://127.0.0.1:3050/"); err != nil {
 		return false
 	} else {
 		defer resp.Body.Close()

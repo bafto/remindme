@@ -5,6 +5,8 @@ package reminder
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -39,6 +41,24 @@ func init() {
 			log.Fatal(err)
 		}
 	}
+	f, err := os.OpenFile(savePath, os.O_RDONLY, os.ModePerm)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+	if content, err := io.ReadAll(f); err != nil {
+		log.Fatal(err)
+	} else if !json.Valid(content) {
+		fmt.Printf("The cache file contains invalid json data.\nDo you want to clear the file? [y/n]: ")
+		var s string
+		fmt.Scanf("%s", &s)
+		if s[0] != 'y' {
+			os.Exit(1)
+		}
+		if err := os.WriteFile(savePath, []byte("[]"), os.ModePerm); err != nil {
+			log.Fatal(err)
+		}
+	}
 }
 
 // represents a single entry in the saved reminders
@@ -63,12 +83,12 @@ func (e *Entry) GetTime() (time.Time, error) {
 }
 
 func overrideReminders(entries []Entry) error {
-	data, err := json.Marshal(entries)
+	data, err := json.MarshalIndent(entries, "", "\t")
 	if err != nil {
 		return err
 	}
 
-	f, err := os.OpenFile(savePath, os.O_TRUNC, os.ModePerm)
+	f, err := os.OpenFile(savePath, os.O_TRUNC|os.O_WRONLY, os.ModePerm)
 	if err != nil {
 		return err
 	}
@@ -109,9 +129,11 @@ func RemoveReminder(entry Entry) (int, error) {
 	}
 
 	// remove the specified entry by checking
-	for i, other := range entries {
-		if other.Id == entry.Id {
-			entries = append(entries[:i], entries[i+1:]...)
+	for i := 0; i < len(entries); i++ {
+		if entries[i].Id == entry.Id {
+			entries[i] = entries[len(entries)-1]
+			entries = entries[:len(entries)-1]
+			i--
 		}
 	}
 

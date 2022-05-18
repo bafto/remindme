@@ -35,17 +35,17 @@ func parseArgs() cmdArgs {
 
 func StartClient() {
 	args := parseArgs()
-	remind := reminder.Entry{
-		Title: args.title,
-		Msg:   args.msg,
-		When:  time.Now().Add(args.after).Format(reminder.TimeLayout),
-	}
-	if body, err := json.Marshal(remind); err != nil {
+	remind := reminder.NewEntry(
+		time.Now().Add(args.after),
+		args.title,
+		args.msg,
+	)
+	if body, err := json.MarshalIndent(remind, "", "\t"); err != nil {
 		log.Println(err)
 		return
 	} else {
-		buf := bytes.NewBuffer(body)
-		resp, err := http.Post("127.0.0.1:3050", "application/json", buf)
+		buf := bytes.NewReader(body)
+		resp, err := http.Post("http://127.0.0.1:3050/", "application/json", buf)
 		if err != nil {
 			log.Println(err)
 			return
