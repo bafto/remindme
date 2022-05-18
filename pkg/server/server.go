@@ -102,6 +102,13 @@ func StartServer(port string) (<-chan error, error) {
 
 		switch r.Method {
 		case http.MethodPost:
+			if when, err := event.GetTime(); err != nil {
+				log.Println(err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			} else if when.Before(time.Now()) {
+				return
+			}
 			if err := queueEvent(event); err != nil {
 				log.Println(err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -118,7 +125,9 @@ func StartServer(port string) (<-chan error, error) {
 				http.Error(w, "failed to remove the event", http.StatusInternalServerError)
 				return
 			}
-			tickerChannels[event.Id] <- true // close the ticker goroutine
+			if _, ok := tickerChannels[event.Id]; ok {
+				tickerChannels[event.Id] <- true // close the ticker goroutine
+			}
 		default:
 			http.Error(w, "invalid request type", http.StatusBadRequest)
 		}
