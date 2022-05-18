@@ -37,7 +37,7 @@ func queueEvent(event reminder.Entry) error {
 	tickerChannels[event.Id] = make(chan bool)
 	go func(event reminder.Entry) {
 		select {
-		case <-time.After(when.Sub(time.Now())):
+		case <-time.After(time.Until(when)):
 			eventChan <- event
 		case <-tickerChannels[event.Id]:
 			return
@@ -85,6 +85,13 @@ func StartServer(port string) (<-chan error, error) {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
+
+		// to check if the server is running
+		if r.Method == http.MethodGet {
+			w.Write([]byte("pong"))
+			return
+		}
+
 		// read the request body
 		body, err := io.ReadAll(r.Body)
 		if err != nil {

@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	timeLayout = time.UnixDate
+	TimeLayout = time.UnixDate
 )
 
 var (
@@ -51,7 +51,7 @@ type Entry struct {
 
 func NewEntry(when time.Time, title, msg string) Entry {
 	return Entry{
-		When:  when.Format(timeLayout),
+		When:  when.Format(TimeLayout),
 		Title: title,
 		Msg:   msg,
 		Id:    uuid.New(),
@@ -59,7 +59,7 @@ func NewEntry(when time.Time, title, msg string) Entry {
 }
 
 func (e *Entry) GetTime() (time.Time, error) {
-	return time.Parse(timeLayout, e.When)
+	return time.Parse(TimeLayout, e.When)
 }
 
 func overrideReminders(entries []Entry) error {
