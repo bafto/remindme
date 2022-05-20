@@ -33,7 +33,7 @@ func parseArgs() cmdArgs {
 	return retArgs
 }
 
-func StartClient() {
+func StartClient() error {
 	args := parseArgs()
 	remind := reminder.NewEntry(
 		time.Now().Add(args.after),
@@ -41,14 +41,12 @@ func StartClient() {
 		args.msg,
 	)
 	if body, err := json.MarshalIndent(remind, "", "\t"); err != nil {
-		log.Println(err)
-		return
+		return err
 	} else {
 		buf := bytes.NewReader(body)
 		resp, err := http.Post("http://127.0.0.1:3050/", "application/json", buf)
 		if err != nil {
-			log.Println(err)
-			return
+			return err
 		}
 		defer resp.Body.Close()
 		body, _ := io.ReadAll(resp.Body)
@@ -56,4 +54,5 @@ func StartClient() {
 			log.Printf("Server replied with a status of %d: %s\n", resp.StatusCode, string(body))
 		}
 	}
+	return nil
 }

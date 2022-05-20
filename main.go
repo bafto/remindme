@@ -6,6 +6,7 @@ import (
 
 	"github.com/bafto/remindme/pkg/client"
 	"github.com/bafto/remindme/pkg/server"
+	"github.com/gen2brain/beeep"
 )
 
 func serverRunning() bool {
@@ -19,10 +20,13 @@ func serverRunning() bool {
 
 func main() {
 	if serverRunning() {
-		client.StartClient()
+		if err := client.StartClient(); err != nil {
+			log.Println(err)
+		}
 	} else {
 		if finished, err := server.StartServer(":3050"); err != nil {
 			log.Printf("Could not start server: %s\n", err.Error())
+			beeep.Notify("Remindme Error", err.Error(), "")
 		} else if err := <-finished; err != nil {
 			log.Printf("Server errored: %s\n", err.Error())
 		}
