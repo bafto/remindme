@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -111,6 +112,31 @@ func GetAllReminders() (entries []Entry, err error) {
 	return entries, nil
 }
 
+func GetAllRemindersSorted() (entries []Entry, err error) {
+	// catch errors in sort function
+	defer func() {
+		if pan := recover(); pan != nil {
+			entries, err = nil, pan.(error)
+		}
+	}()
+	// get entries
+	if entries, err = GetAllReminders(); err != nil {
+		return nil, err
+	} else {
+		// sort entries
+		sort.Slice(entries, func(i, j int) bool {
+			if when, err := entries[i].GetTime(); err != nil {
+				panic(err)
+			} else if when2, err := entries[j].GetTime(); err != nil {
+				panic(err)
+			} else {
+				return when.Before(when2)
+			}
+		})
+		return entries, err
+	}
+}
+
 func AddReminder(entry Entry) error {
 	if entries, err := GetAllReminders(); err != nil {
 		return err
@@ -122,7 +148,7 @@ func AddReminder(entry Entry) error {
 
 // removes the specified entry by comparing it
 // returns the number of remaining reminders
-func RemoveReminder(entry Entry) (int, error) {
+func RemoveReminder(id uuid.UUID) (int, error) {
 	entries, err := GetAllReminders()
 	if err != nil {
 		return 0, err
@@ -130,7 +156,7 @@ func RemoveReminder(entry Entry) (int, error) {
 
 	// remove the specified entry by checking
 	for i := 0; i < len(entries); i++ {
-		if entries[i].Id == entry.Id {
+		if entries[i].Id == id {
 			entries[i] = entries[len(entries)-1]
 			entries = entries[:len(entries)-1]
 			i--

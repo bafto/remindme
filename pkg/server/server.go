@@ -75,7 +75,7 @@ func notifyMissedEvents() {
 	}(), "\n")
 	beeep.Notify(fmt.Sprintf("You missed %d reminders", len(missedEvents)), str, "")
 	for _, entry := range missedEvents {
-		reminder.RemoveReminder(entry)
+		reminder.RemoveReminder(entry.Id)
 	}
 }
 
@@ -87,29 +87,25 @@ func StartServer(port string) (<-chan error, error) {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 
-		// to check if the server is running
-		if r.Method == http.MethodGet {
-			w.Write([]byte("pong"))
-			return
-		}
-
-		// read the request body
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			log.Println(err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		// unmarshal the request body into the event
-		var event reminder.Entry
-		if err := json.Unmarshal(body, &event); err != nil {
-			log.Println(err)
-			http.Error(w, "invalid json body", http.StatusBadRequest)
-			return
-		}
-
 		switch r.Method {
-		case http.MethodPost:
+		case http.MethodGet: // to check if the server is running
+			w.Write([]byte("pong"))
+		case http.MethodPost: // to add a reminder
+			// read the request body
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				log.Println(err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			// unmarshal the request body into the event
+			var event reminder.Entry
+			if err := json.Unmarshal(body, &event); err != nil {
+				log.Println(err)
+				http.Error(w, "invalid json body", http.StatusBadRequest)
+				return
+			}
+
 			if when, err := event.GetTime(); err != nil {
 				log.Println(err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -126,15 +122,27 @@ func StartServer(port string) (<-chan error, error) {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-		case http.MethodDelete:
+		case http.MethodDelete: // to remove a reminder
+			// parse the id of the entry to be removed
+			var (
+				id  uuid.UUID
+				err error
+			)
+			if idQuery := r.URL.Query().Get("id"); idQuery == "" {
+				http.Error(w, "missing query 'id'", http.StatusBadRequest)
+				return
+			} else if id, err = uuid.Parse(idQuery); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
 			// remove the event from the list
-			if _, err := reminder.RemoveReminder(event); err != nil {
+			if _, err := reminder.RemoveReminder(id); err != nil {
 				log.Println(err)
 				http.Error(w, "failed to remove the event", http.StatusInternalServerError)
 				return
 			}
-			if _, ok := tickerChannels[event.Id]; ok {
-				tickerChannels[event.Id] <- true // close the ticker goroutine
+			if _, ok := tickerChannels[id]; ok {
+				tickerChannels[id] <- true // close the ticker goroutine
 			}
 		default:
 			http.Error(w, "invalid request type", http.StatusBadRequest)
@@ -150,7 +158,7 @@ func StartServer(port string) (<-chan error, error) {
 			if err := beeep.Notify(event.Title, event.Msg, ""); err != nil {
 				fmt.Fprintf(os.Stderr, "%s", err)
 			}
-			if _, err := reminder.RemoveReminder(event); err != nil {
+			if _, err := reminder.RemoveReminder(event.Id); err != nil {
 				fmt.Fprintf(os.Stderr, "Unable to remove Reminder: %s", err)
 			}
 		}
